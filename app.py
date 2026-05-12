@@ -1,0 +1,142 @@
+import streamlit as st
+import pandas as pd
+import re
+import zipfile
+import io
+from datetime import datetime
+
+st.set_page_config(page_title="KS Backer Parser", layout="wide")
+st.title("🎯 Kickstarter Backer CSV Parser")
+st.markdown("**Smart splitting + Fulfillment tools**")
+
+# ====================== FILE UPLOAD ======================
+uploaded_file = st.file_uploader("Upload your raw Kickstarter backers CSV", type=["csv"])
+
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.success(f"✅ Loaded **{len(df):,} backers** × **{len(df.columns)} columns**")
+
+    # ====================== ROBUST AUTO COLUMN DETECTION ======================
+    def clean_column_name(col: str) -> str:
+        col = re.sub(r'\[Addon: \d+\]\s*', '', col)
+        col = col.replace(" by ", " - ").replace("\u2019", "'").replace(" of of ", " of ")
+        col = re.sub(r'[^a-zA-Z0-9\s\-]', '', col)
+        return re.sub(r'\s+', '_', col.strip())
+
+    core_keywords = ['Backer Number', 'Backer UID', 'Backer Name', 'Email', 'Reward Title',
+                     'Pledge Amount', 'Pledged At', 'Late Pledge', 'Fulfillment Status',
+                     'Pledged Status', 'Notes', 'Billing']
+
+    shipping_keywords = ['Shipping']
+
+    addon_keywords = ['Addon', 'Terrible Means', 'Days by', 'Victory Point', 'Sleeping While',
+                      'Acid Box', 'Scrapbook', 'Barking', 'Macbeth', 'Orlando', 'Postcard',
+                      'Zine', 'Sketch', 'Digital Bundle', 'Physical bundle', 'print copy']
+
+    core_cols = [col for col in df.columns if any(k in col for k in core_keywords)]
+    shipping_cols = [col for col in df.columns if any(k in col for k in shipping_keywords)]
+    addon_cols = [col for col in df.columns
+                  if col not in core_cols and col not in shipping_cols]
+
+    # ====================== SIDEBAR FILTERS ======================
+    st.sidebar.header("🔍 Filters")
+
+    selected_countries = None
+    if 'Shipping Country' in df.columns:
+        countries = sorted(df['Shipping Country'].dropna().unique())
+        selected_countries = st.sidebar.multiselect(
+            "Filter by Country", options=countries,
+            default=countries[:5] if len(countries) > 5 else countries
+        )
+
+    filtered_df = df.copy()
+    if selected_countries:
+        filtered_df = filtered_df[filtered_df['Shipping Country'].isin(selected_countries)]
+
+    st.sidebar.metric("Filtered Backers", len(filtered_df))
+
+    # ====================== CREATE SPLITS ======================
+    core_df = filtered_df[core_cols].copy()
+    addons_df = filtered_df[['Backer Number'] + addon_cols].copy() if 'Backer Number' in filtered_df.columns else filtered_df[addon_cols].copy()
+    shipping_df = filtered_df[['Backer Number'] + shipping_cols].copy() if 'Backer Number' in filtered_df.columns else filtered_df[shipping_cols].copy()
+
+    if 'Backer Number' in filtered_df.columns:
+        addons_df.columns = ['Backer Number'] + [clean_column_name(col) for col in addon_cols]
+    else:
+        addons_df.columns = [clean_column_name(col) for col in addon_cols]
+
+    # ====================== FULFILLMENT DASHBOARD ======================
+    st.header("📦 Fulfillment Dashboard")
+    dash1, dash2, dash3, dash4 = st.columns(4)
+
+    with dash1:
+        st.metric("Total Filtered Backers", len(filtered_df))
+    with dash2:
+        if 'Reward Title' in filtered_df.columns:
+            physical = len(filtered_df[~filtered_df['Reward Title'].str.contains("Digital", na=False)])
+            st.metric("Physical Orders", physical)
+        else:
+            st.metric("Physical Orders", "N/A")
+    with dash3:
+        addr_col = next((c for c in shipping_df.columns if 'Address' in c), None)
+        if addr_col:
+            missing_addr = shipping_df[addr_col].isna().sum() + (shipping_df[addr_col] == "").sum()
+            st.metric("Missing Address", int(missing_addr))
+        else:
+            st.metric("Missing Address", "N/A")
+    with dash4:
+        if 'Shipping Country' in filtered_df.columns:
+            st.metric("Countries", filtered_df['Shipping Country'].nunique())
+        else:
+            st.metric("Countries", "N/A")
+
+    if 'Shipping Country' in filtered_df.columns:
+        st.subheader("Top Shipping Countries")
+        st.bar_chart(filtered_df['Shipping Country'].value_counts().head(10))
+
+    # ====================== TABS ======================
+    tab1, tab2, tab3, tab4 = st.tabs(["Core Backers", "Addons", "Shipping", "Raw Data"])
+    with tab1:
+        st.dataframe(core_df.head(15), use_container_width=True)
+    with tab2:
+        st.dataframe(addons_df.head(15), use_container_width=True)
+    with tab3:
+        st.dataframe(shipping_df.head(15), use_container_width=True)
+    with tab4:
+        st.dataframe(filtered_df.head(10), use_container_width=True)
+
+    # ====================== DOWNLOADS ======================
+    st.header("📥 Download Split Files")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(f"core_backers_{timestamp}.csv", core_df.to_csv(index=False))
+        z.writestr(f"addons_{timestamp}.csv", addons_df.to_csv(index=False))
+        z.writestr(f"shipping_{timestamp}.csv", shipping_df.to_csv(index=False))
+
+    zip_buffer.seek(0)
+
+    st.download_button(
+        label="📦 Download All Three Files (ZIP)",
+        data=zip_buffer,
+        file_name=f"ks_backers_split_{timestamp}.zip",
+        mime="application/zip"
+    )
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.download_button("Core Backers CSV", core_df.to_csv(index=False),
+                           f"core_backers_{timestamp}.csv", "text/csv")
+    with col2:
+        st.download_button("Addons CSV", addons_df.to_csv(index=False),
+                           f"addons_{timestamp}.csv", "text/csv")
+    with col3:
+        st.download_button("Shipping CSV", shipping_df.to_csv(index=False),
+                           f"shipping_{timestamp}.csv", "text/csv")
+
+else:
+    st.info("👆 Upload your Kickstarter 'All Rewards' CSV to start")
+    st.markdown("**Tip**: This app auto-detects columns using keywords and includes fulfillment insights.")
+
+st.caption("Kickstarter Backer Parser v1.0 • Auto-detection + Fulfillment tools")
