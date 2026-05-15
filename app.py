@@ -39,14 +39,16 @@ if uploaded_file is not None:
 
     shipping_keywords = ['Shipping']
 
-    addon_keywords = ['Addon', 'Terrible Means', 'Days by', 'Victory Point', 'Sleeping While',
-                      'Acid Box', 'Scrapbook', 'Barking', 'Macbeth', 'Orlando', 'Postcard',
-                      'Zine', 'Sketch', 'Digital Bundle', 'Physical bundle', 'print copy']
-
     core_cols = [col for col in df.columns if any(k in col for k in core_keywords)]
     shipping_cols = [col for col in df.columns if any(k in col for k in shipping_keywords)]
+    # Addons are everything not matched by core or shipping keywords
     addon_cols = [col for col in df.columns
                   if col not in core_cols and col not in shipping_cols]
+
+    with st.expander("Column classification (click to inspect)"):
+        st.write(f"**Core ({len(core_cols)}):** {', '.join(core_cols) or 'none'}")
+        st.write(f"**Shipping ({len(shipping_cols)}):** {', '.join(shipping_cols) or 'none'}")
+        st.write(f"**Addons ({len(addon_cols)}):** {', '.join(addon_cols) or 'none'}")
 
     # ====================== SIDEBAR FILTERS ======================
     st.sidebar.header("🔍 Filters")
