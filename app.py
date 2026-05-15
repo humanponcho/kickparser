@@ -13,8 +13,23 @@ st.markdown("**Smart splitting + Fulfillment tools**")
 uploaded_file = st.file_uploader("Upload your raw Kickstarter backers CSV", type=["csv"])
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.success(f"✅ Loaded **{len(df):,} backers** × **{len(df.columns)} columns**")
+    try:
+        df = pd.read_csv(uploaded_file)
+    except Exception as e:
+        st.error(f"Could not read the file as a CSV: **{e}**\n\nPlease upload a valid `.csv` export.")
+        st.stop()
+
+    if df.empty:
+        st.warning("The uploaded file contains no rows. Please check your export and try again.")
+        st.stop()
+
+    if len(df.columns) < 5:
+        st.warning(
+            f"Only {len(df.columns)} column(s) found. "
+            "This doesn't look like a Kickstarter 'All Rewards' export. "
+            "Please re-export from **Reports → All Rewards**."
+        )
+        st.stop()
 
     REQUIRED_COLUMNS = ['Backer Number', 'Reward Title', 'Shipping Country']
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
@@ -25,6 +40,11 @@ if uploaded_file is not None:
             "and upload that file."
         )
         st.stop()
+
+    st.success(
+        f"✅ Loaded **{len(df):,} backers** × **{len(df.columns)} columns** "
+        f"from `{uploaded_file.name}`"
+    )
 
     # ====================== ROBUST AUTO COLUMN DETECTION ======================
     def clean_column_name(col: str) -> str:
@@ -60,6 +80,10 @@ if uploaded_file is not None:
     )
 
     filtered_df = df[df['Shipping Country'].isin(selected_countries)].copy() if selected_countries else df.copy()
+
+    if filtered_df.empty:
+        st.warning("No backers match the current country filter. Adjust the filter in the sidebar.")
+        st.stop()
 
     st.sidebar.metric("Filtered Backers", len(filtered_df))
 
