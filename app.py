@@ -16,6 +16,16 @@ if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     st.success(f"✅ Loaded **{len(df):,} backers** × **{len(df.columns)} columns**")
 
+    REQUIRED_COLUMNS = ['Backer Number', 'Reward Title', 'Shipping Country']
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        st.error(
+            f"The uploaded CSV is missing expected columns: **{', '.join(missing)}**\n\n"
+            "Please export from Kickstarter using **Reports → All Rewards** "
+            "and upload that file."
+        )
+        st.stop()
+
     # ====================== ROBUST AUTO COLUMN DETECTION ======================
     def clean_column_name(col: str) -> str:
         col = re.sub(r'\[Addon: \d+\]\s*', '', col)
@@ -41,29 +51,22 @@ if uploaded_file is not None:
     # ====================== SIDEBAR FILTERS ======================
     st.sidebar.header("🔍 Filters")
 
-    selected_countries = None
-    if 'Shipping Country' in df.columns:
-        countries = sorted(df['Shipping Country'].dropna().unique())
-        selected_countries = st.sidebar.multiselect(
-            "Filter by Country", options=countries,
-            default=countries[:5] if len(countries) > 5 else countries
-        )
+    countries = sorted(df['Shipping Country'].dropna().unique())
+    selected_countries = st.sidebar.multiselect(
+        "Filter by Country", options=countries,
+        default=countries[:5] if len(countries) > 5 else countries
+    )
 
-    filtered_df = df.copy()
-    if selected_countries:
-        filtered_df = filtered_df[filtered_df['Shipping Country'].isin(selected_countries)]
+    filtered_df = df[df['Shipping Country'].isin(selected_countries)].copy() if selected_countries else df.copy()
 
     st.sidebar.metric("Filtered Backers", len(filtered_df))
 
     # ====================== CREATE SPLITS ======================
     core_df = filtered_df[core_cols].copy()
-    addons_df = filtered_df[['Backer Number'] + addon_cols].copy() if 'Backer Number' in filtered_df.columns else filtered_df[addon_cols].copy()
-    shipping_df = filtered_df[['Backer Number'] + shipping_cols].copy() if 'Backer Number' in filtered_df.columns else filtered_df[shipping_cols].copy()
+    addons_df = filtered_df[['Backer Number'] + addon_cols].copy()
+    shipping_df = filtered_df[['Backer Number'] + shipping_cols].copy()
 
-    if 'Backer Number' in filtered_df.columns:
-        addons_df.columns = ['Backer Number'] + [clean_column_name(col) for col in addon_cols]
-    else:
-        addons_df.columns = [clean_column_name(col) for col in addon_cols]
+    addons_df.columns = ['Backer Number'] + [clean_column_name(col) for col in addon_cols]
 
     # ====================== FULFILLMENT DASHBOARD ======================
     st.header("📦 Fulfillment Dashboard")
@@ -72,11 +75,8 @@ if uploaded_file is not None:
     with dash1:
         st.metric("Total Filtered Backers", len(filtered_df))
     with dash2:
-        if 'Reward Title' in filtered_df.columns:
-            physical = len(filtered_df[~filtered_df['Reward Title'].str.contains("Digital", na=False)])
-            st.metric("Physical Orders", physical)
-        else:
-            st.metric("Physical Orders", "N/A")
+        physical = len(filtered_df[~filtered_df['Reward Title'].str.contains("Digital", na=False)])
+        st.metric("Physical Orders", physical)
     with dash3:
         addr_col = next((c for c in shipping_df.columns if 'Address' in c), None)
         if addr_col:
@@ -85,14 +85,10 @@ if uploaded_file is not None:
         else:
             st.metric("Missing Address", "N/A")
     with dash4:
-        if 'Shipping Country' in filtered_df.columns:
-            st.metric("Countries", filtered_df['Shipping Country'].nunique())
-        else:
-            st.metric("Countries", "N/A")
+        st.metric("Countries", filtered_df['Shipping Country'].nunique())
 
-    if 'Shipping Country' in filtered_df.columns:
-        st.subheader("Top Shipping Countries")
-        st.bar_chart(filtered_df['Shipping Country'].value_counts().head(10))
+    st.subheader("Top Shipping Countries")
+    st.bar_chart(filtered_df['Shipping Country'].value_counts().head(10))
 
     # ====================== TABS ======================
     tab1, tab2, tab3, tab4 = st.tabs(["Core Backers", "Addons", "Shipping", "Raw Data"])
