@@ -88,10 +88,19 @@ if uploaded_file is not None:
         default=countries[:5] if len(countries) > 5 else countries
     )
 
-    filtered_df = df[df['Shipping Country'].isin(selected_countries)].copy() if selected_countries else df.copy()
+    rewards = sorted(df['Reward Title'].dropna().unique())
+    selected_rewards = st.sidebar.multiselect(
+        "Filter by Reward", options=rewards, default=rewards
+    )
+
+    filtered_df = df.copy()
+    if selected_countries:
+        filtered_df = filtered_df[filtered_df['Shipping Country'].isin(selected_countries)]
+    if selected_rewards:
+        filtered_df = filtered_df[filtered_df['Reward Title'].isin(selected_rewards)]
 
     if filtered_df.empty:
-        st.warning("No backers match the current country filter. Adjust the filter in the sidebar.")
+        st.warning("No backers match the current filters. Adjust the filters in the sidebar.")
         st.stop()
 
     st.sidebar.metric("Filtered Backers", len(filtered_df))
@@ -126,15 +135,13 @@ if uploaded_file is not None:
     st.bar_chart(filtered_df['Shipping Country'].value_counts().head(10))
 
     # ====================== TABS ======================
-    tab1, tab2, tab3, tab4 = st.tabs(["Core Backers", "Addons", "Shipping", "Raw Data"])
+    tab1, tab2, tab3 = st.tabs(["Addons", "Shipping", "Raw Data"])
     with tab1:
-        st.dataframe(core_df.head(15), use_container_width=True)
+        st.dataframe(addons_df, use_container_width=True)
     with tab2:
-        st.dataframe(addons_df.head(15), use_container_width=True)
+        st.dataframe(shipping_df, use_container_width=True)
     with tab3:
-        st.dataframe(shipping_df.head(15), use_container_width=True)
-    with tab4:
-        st.dataframe(filtered_df.head(10), use_container_width=True)
+        st.dataframe(filtered_df, use_container_width=True)
 
     # ====================== DOWNLOADS ======================
     st.header("📥 Download Split Files")
