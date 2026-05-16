@@ -1,5 +1,5 @@
 import pytest
-from parser_logic import clean_column_name, classify_columns
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names
 
 
 class TestCleanColumnName:
@@ -78,3 +78,25 @@ class TestClassifyColumns:
         assert len(shipping) == 3
         assert core == []
         assert addons == []
+
+
+class TestDedupeColumnNames:
+    def test_no_duplicates_unchanged(self):
+        assert dedupe_column_names(['A', 'B', 'C']) == ['A', 'B', 'C']
+
+    def test_single_duplicate_gets_suffix(self):
+        result = dedupe_column_names(['A', 'B', 'A'])
+        assert result == ['A', 'B', 'A_1']
+
+    def test_multiple_duplicates_increment(self):
+        result = dedupe_column_names(['A', 'A', 'A'])
+        assert result == ['A', 'A_1', 'A_2']
+
+    def test_empty_list(self):
+        assert dedupe_column_names([]) == []
+
+    def test_realistic_addon_collision(self):
+        # Two addon cols that clean to the same name
+        cols = ['T-Shirt', 'T-Shirt', 'Poster']
+        result = dedupe_column_names(cols)
+        assert len(set(result)) == len(result)  # all unique

@@ -15,6 +15,19 @@ def clean_column_name(col: str) -> str:
     return re.sub(r'\s+', '_', col.strip())
 
 
+def dedupe_column_names(cols: list) -> list:
+    seen = {}
+    result = []
+    for col in cols:
+        if col in seen:
+            seen[col] += 1
+            result.append(f"{col}_{seen[col]}")
+        else:
+            seen[col] = 0
+            result.append(col)
+    return result
+
+
 def classify_columns(columns: list) -> tuple:
     core = [c for c in columns if any(k in c for k in CORE_KEYWORDS)]
     shipping = [c for c in columns if any(k in c for k in SHIPPING_KEYWORDS)]

@@ -3,7 +3,7 @@ import pandas as pd
 import zipfile
 import io
 from datetime import datetime
-from parser_logic import clean_column_name, classify_columns
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
 st.title("🎯 Kickstarter Backer CSV Parser")
@@ -76,7 +76,7 @@ if uploaded_file is not None:
     addons_df = filtered_df[['Backer Number'] + addon_cols].copy()
     shipping_df = filtered_df[['Backer Number'] + shipping_cols].copy()
 
-    addons_df.columns = ['Backer Number'] + [clean_column_name(col) for col in addon_cols]
+    addons_df.columns = ['Backer Number'] + dedupe_column_names([clean_column_name(col) for col in addon_cols])
 
     # ====================== FULFILLMENT DASHBOARD ======================
     st.header("📦 Fulfillment Dashboard")
