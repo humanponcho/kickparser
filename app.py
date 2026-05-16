@@ -6,6 +6,31 @@ from datetime import datetime
 from parser_logic import clean_column_name, classify_columns, dedupe_column_names
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
+
+
+# ====================== AUTHENTICATION ======================
+def check_password() -> bool:
+    def password_entered():
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", False):
+        return True
+
+    st.title("🎯 Kickstarter Backer Parser")
+    st.markdown("This tool handles personal backer data. Enter the password to continue.")
+    st.text_input("Password", type="password", on_change=password_entered, key="password")
+    if "password_correct" in st.session_state:
+        st.error("Incorrect password — try again.")
+    return False
+
+if not check_password():
+    st.stop()
+
+
 st.title("🎯 Kickstarter Backer CSV Parser")
 st.markdown("**Smart splitting + Fulfillment tools**")
 
