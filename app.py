@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-import re
 import zipfile
 import io
 from datetime import datetime
+from parser_logic import clean_column_name, classify_columns
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
 st.title("🎯 Kickstarter Backer CSV Parser")
@@ -47,23 +47,7 @@ if uploaded_file is not None:
     )
 
     # ====================== ROBUST AUTO COLUMN DETECTION ======================
-    def clean_column_name(col: str) -> str:
-        col = re.sub(r'\[Addon: \d+\]\s*', '', col)
-        col = col.replace(" by ", " - ").replace("\u2019", "'").replace(" of of ", " of ")
-        col = re.sub(r'[^a-zA-Z0-9\s\-]', '', col)
-        return re.sub(r'\s+', '_', col.strip())
-
-    core_keywords = ['Backer Number', 'Backer UID', 'Backer Name', 'Email', 'Reward Title',
-                     'Pledge Amount', 'Pledged At', 'Late Pledge', 'Fulfillment Status',
-                     'Pledged Status', 'Notes', 'Billing']
-
-    shipping_keywords = ['Shipping']
-
-    core_cols = [col for col in df.columns if any(k in col for k in core_keywords)]
-    shipping_cols = [col for col in df.columns if any(k in col for k in shipping_keywords)]
-    # Addons are everything not matched by core or shipping keywords
-    addon_cols = [col for col in df.columns
-                  if col not in core_cols and col not in shipping_cols]
+    core_cols, shipping_cols, addon_cols = classify_columns(df.columns.tolist())
 
     with st.expander("Column classification (click to inspect)"):
         st.write(f"**Core ({len(core_cols)}):** {', '.join(core_cols) or 'none'}")
