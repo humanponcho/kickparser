@@ -7,6 +7,15 @@ CORE_KEYWORDS = [
 ]
 SHIPPING_KEYWORDS = ['Shipping']
 
+LABEL_COLUMNS = [
+    'Shipping Name',
+    'Shipping Address 1',
+    'Shipping City',
+    'Shipping State',
+    'Shipping Postal Code',
+    'Shipping Country Code',
+]
+
 
 def clean_column_name(col: str) -> str:
     col = re.sub(r'\[Addon: \d+\]\s*', '', col)
@@ -26,6 +35,26 @@ def dedupe_column_names(cols: list) -> list:
             seen[col] = 0
             result.append(col)
     return result
+
+
+def build_label(row) -> str:
+    def val(key):
+        v = row.get(key, '')
+        if v != v:  # NaN check (NaN != NaN)
+            return ''
+        return str(v or '').strip()
+
+    name     = val('Shipping Name')
+    addr1    = val('Shipping Address 1')
+    city     = val('Shipping City')
+    state    = val('Shipping State')
+    postal   = val('Shipping Postal Code')
+    country  = val('Shipping Country Code')
+
+    city_state = ', '.join(filter(None, [city, state]))
+    city_line  = f"{city_state}  {postal}".strip() if postal else city_state
+
+    return '\n'.join(line for line in [name, addr1, city_line, country] if line)
 
 
 def classify_columns(columns: list) -> tuple:

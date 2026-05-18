@@ -3,7 +3,7 @@ import pandas as pd
 import zipfile
 import io
 from datetime import datetime
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, LABEL_COLUMNS
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
 
@@ -112,6 +112,10 @@ if uploaded_file is not None:
 
     addons_df.columns = ['Backer Number'] + dedupe_column_names([clean_column_name(col) for col in addon_cols])
 
+    label_source_cols = [c for c in LABEL_COLUMNS if c in filtered_df.columns]
+    labels_df = filtered_df[['Backer Number']].copy()
+    labels_df['Label'] = filtered_df[label_source_cols].apply(build_label, axis=1)
+
     # ====================== FULFILLMENT DASHBOARD ======================
     st.header("📦 Fulfillment Dashboard")
     dash1, dash2, dash3, dash4 = st.columns(4)
@@ -135,12 +139,14 @@ if uploaded_file is not None:
     st.bar_chart(filtered_df['Shipping Country'].value_counts().head(10))
 
     # ====================== TABS ======================
-    tab1, tab2, tab3 = st.tabs(["Addons", "Shipping", "Raw Data"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Addons", "Shipping", "Labels", "Raw Data"])
     with tab1:
         st.dataframe(addons_df, use_container_width=True)
     with tab2:
         st.dataframe(shipping_df, use_container_width=True)
     with tab3:
+        st.dataframe(labels_df, use_container_width=True)
+    with tab4:
         st.dataframe(filtered_df, use_container_width=True)
 
     # ====================== DOWNLOADS ======================
@@ -152,17 +158,18 @@ if uploaded_file is not None:
         z.writestr(f"core_backers_{timestamp}.csv", core_df.to_csv(index=False))
         z.writestr(f"addons_{timestamp}.csv", addons_df.to_csv(index=False))
         z.writestr(f"shipping_{timestamp}.csv", shipping_df.to_csv(index=False))
+        z.writestr(f"labels_{timestamp}.csv", labels_df.to_csv(index=False))
 
     zip_buffer.seek(0)
 
     st.download_button(
-        label="📦 Download All Three Files (ZIP)",
+        label="📦 Download All Files (ZIP)",
         data=zip_buffer,
         file_name=f"ks_backers_split_{timestamp}.zip",
         mime="application/zip"
     )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.download_button("Core Backers CSV", core_df.to_csv(index=False),
                            f"core_backers_{timestamp}.csv", "text/csv")
@@ -172,6 +179,9 @@ if uploaded_file is not None:
     with col3:
         st.download_button("Shipping CSV", shipping_df.to_csv(index=False),
                            f"shipping_{timestamp}.csv", "text/csv")
+    with col4:
+        st.download_button("Labels CSV", labels_df.to_csv(index=False),
+                           f"labels_{timestamp}.csv", "text/csv")
 
 else:
     st.info("👆 Upload your Kickstarter 'All Rewards' CSV to start")

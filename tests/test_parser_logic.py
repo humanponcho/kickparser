@@ -1,5 +1,5 @@
 import pytest
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label
 
 
 class TestCleanColumnName:
@@ -100,3 +100,49 @@ class TestDedupeColumnNames:
         cols = ['T-Shirt', 'T-Shirt', 'Poster']
         result = dedupe_column_names(cols)
         assert len(set(result)) == len(result)  # all unique
+
+
+class TestBuildLabel:
+    def _row(self, **kwargs):
+        defaults = {
+            'Shipping Name': 'Jane Doe',
+            'Shipping Address 1': '123 Main St',
+            'Shipping City': 'Springfield',
+            'Shipping State': 'IL',
+            'Shipping Postal Code': '62701',
+            'Shipping Country Code': 'US',
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_full_row(self):
+        label = build_label(self._row())
+        assert label == "Jane Doe\n123 Main St\nSpringfield, IL  62701\nUS"
+
+    def test_missing_state(self):
+        label = build_label(self._row(**{'Shipping State': ''}))
+        assert 'Springfield  62701' in label
+
+    def test_missing_postal(self):
+        label = build_label(self._row(**{'Shipping Postal Code': ''}))
+        assert 'Springfield, IL' in label
+        assert '  ' not in label.split('\n')[2]
+
+    def test_missing_address1(self):
+        label = build_label(self._row(**{'Shipping Address 1': ''}))
+        lines = label.split('\n')
+        assert 'Jane Doe' in lines[0]
+        assert '123 Main St' not in label
+
+    def test_nan_values_omitted(self):
+        import math
+        label = build_label(self._row(**{'Shipping State': float('nan')}))
+        assert 'nan' not in label.lower()
+
+    def test_empty_row_returns_empty_string(self):
+        label = build_label({})
+        assert label == ''
+
+    def test_no_trailing_blank_lines(self):
+        label = build_label(self._row(**{'Shipping Country Code': ''}))
+        assert not label.endswith('\n')
