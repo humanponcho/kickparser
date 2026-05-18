@@ -57,6 +57,32 @@ def build_label(row) -> str:
     return '\n'.join(line for line in [name, addr1, city_line, country] if line)
 
 
+def build_items_list(row, addon_cols: list) -> str:
+    items = []
+
+    reward = str(row.get('Reward Title', '') or '').strip()
+    if reward and reward.lower() != 'nan':
+        items.append(reward)
+
+    for col in addon_cols:
+        v = row.get(col, '')
+        if v != v:  # NaN
+            continue
+        v_str = str(v).strip()
+        if not v_str or v_str in ('0', '0.0'):
+            continue
+        display = clean_column_name(col).replace('_', ' ')
+        try:
+            qty = int(float(v_str))
+            if qty <= 0:
+                continue
+            items.append(f"{qty}x {display}" if qty > 1 else display)
+        except ValueError:
+            items.append(f"{display}: {v_str}")
+
+    return '\n'.join(f"- {item}" for item in items)
+
+
 def classify_columns(columns: list) -> tuple:
     core = [c for c in columns if any(k in c for k in CORE_KEYWORDS)]
     shipping = [c for c in columns if any(k in c for k in SHIPPING_KEYWORDS)]

@@ -1,5 +1,5 @@
 import pytest
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list
 
 
 class TestCleanColumnName:
@@ -146,3 +146,55 @@ class TestBuildLabel:
     def test_no_trailing_blank_lines(self):
         label = build_label(self._row(**{'Shipping Country Code': ''}))
         assert not label.endswith('\n')
+
+
+class TestBuildItemsList:
+    def _row(self, **kwargs):
+        defaults = {
+            'Reward Title': 'Deluxe Edition',
+            '[Addon: 1] T-Shirt': 1,
+            '[Addon: 2] Poster': 2,
+            '[Addon: 3] Sticker Pack': 0,
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def _addon_cols(self):
+        return ['[Addon: 1] T-Shirt', '[Addon: 2] Poster', '[Addon: 3] Sticker Pack']
+
+    def test_reward_title_always_first(self):
+        result = build_items_list(self._row(), self._addon_cols())
+        assert result.startswith('- Deluxe Edition')
+
+    def test_single_quantity_no_prefix(self):
+        result = build_items_list(self._row(), self._addon_cols())
+        assert '- T-Shirt' in result
+        assert '1x' not in result
+
+    def test_multi_quantity_shows_count(self):
+        result = build_items_list(self._row(), self._addon_cols())
+        assert '- 2x Poster' in result
+
+    def test_zero_quantity_excluded(self):
+        result = build_items_list(self._row(), self._addon_cols())
+        assert 'Sticker' not in result
+
+    def test_nan_addon_excluded(self):
+        row = self._row(**{'[Addon: 1] T-Shirt': float('nan')})
+        result = build_items_list(row, self._addon_cols())
+        assert 'T-Shirt' not in result
+        assert 'nan' not in result.lower()
+
+    def test_no_addons_returns_reward_only(self):
+        row = {'Reward Title': 'Basic', '[Addon: 1] T-Shirt': 0}
+        result = build_items_list(row, ['[Addon: 1] T-Shirt'])
+        assert result == '- Basic'
+
+    def test_empty_row_returns_empty_string(self):
+        result = build_items_list({}, [])
+        assert result == ''
+
+    def test_all_items_bulleted(self):
+        result = build_items_list(self._row(), self._addon_cols())
+        for line in result.split('\n'):
+            assert line.startswith('- ')
