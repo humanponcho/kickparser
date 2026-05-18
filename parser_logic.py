@@ -57,6 +57,9 @@ def build_label(row) -> str:
     return '\n'.join(line for line in [name, addr1, city_line, country] if line)
 
 
+_ADDON_RE = re.compile(r'^\[Addon: \d+\]')
+
+
 def build_items_list(row, addon_cols: list) -> str:
     items = []
 
@@ -65,6 +68,8 @@ def build_items_list(row, addon_cols: list) -> str:
         items.append(reward)
 
     for col in addon_cols:
+        if not _ADDON_RE.match(col):
+            continue
         v = row.get(col, '')
         if v != v:  # NaN
             continue
@@ -78,7 +83,7 @@ def build_items_list(row, addon_cols: list) -> str:
                 continue
             items.append(f"{qty}x {display}" if qty > 1 else display)
         except ValueError:
-            items.append(f"{display}: {v_str}")
+            items.append(display)  # non-numeric reply — show name only
 
     return '\n'.join(f"- {item}" for item in items)
 
