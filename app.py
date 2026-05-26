@@ -3,7 +3,9 @@ import pandas as pd
 import zipfile
 import io
 from datetime import datetime
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list, strip_pii, LABEL_COLUMNS
+from parser_logic import (clean_column_name, classify_columns, dedupe_column_names,
+                          build_label, build_items_list, strip_pii,
+                          detect_format, normalise_bigcartel, LABEL_COLUMNS)
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
 
@@ -35,7 +37,7 @@ st.title("🎯 Kickstarter Backer CSV Parser")
 st.markdown("**Smart splitting + Fulfillment tools**")
 
 # ====================== FILE UPLOAD ======================
-uploaded_file = st.file_uploader("Upload your raw Kickstarter backers CSV", type=["csv"])
+uploaded_file = st.file_uploader("Upload a Kickstarter (All Rewards) or Big Cartel (Orders) CSV", type=["csv"])
 
 if uploaded_file is not None:
     try:
@@ -51,24 +53,29 @@ if uploaded_file is not None:
     if len(df.columns) < 5:
         st.warning(
             f"Only {len(df.columns)} column(s) found. "
-            "This doesn't look like a Kickstarter 'All Rewards' export. "
-            "Please re-export from **Reports → All Rewards**."
+            "Supported formats: Kickstarter 'All Rewards' export and Big Cartel orders export."
         )
         st.stop()
+
+    source_format = detect_format(df)
+    if source_format == 'bigcartel':
+        df = normalise_bigcartel(df)
+        st.info("📦 Big Cartel format detected — normalised automatically.")
 
     REQUIRED_COLUMNS = ['Backer Number', 'Reward Title', 'Shipping Country']
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         st.error(
             f"The uploaded CSV is missing expected columns: **{', '.join(missing)}**\n\n"
-            "Please export from Kickstarter using **Reports → All Rewards** "
-            "and upload that file."
+            "Supported formats: Kickstarter **Reports → All Rewards** export "
+            "and Big Cartel **Orders → Export** CSV."
         )
         st.stop()
 
+    format_label = "Big Cartel" if source_format == 'bigcartel' else "Kickstarter"
     st.success(
-        f"✅ Loaded **{len(df):,} backers** × **{len(df.columns)} columns** "
-        f"from `{uploaded_file.name}`"
+        f"✅ Loaded **{len(df):,} orders** × **{len(df.columns)} columns** "
+        f"from `{uploaded_file.name}` ({format_label})"
     )
 
     # ====================== ROBUST AUTO COLUMN DETECTION ======================
@@ -194,7 +201,7 @@ if uploaded_file is not None:
                            f"anon_stats_{timestamp}.csv", "text/csv")
 
 else:
-    st.info("👆 Upload your Kickstarter 'All Rewards' CSV to start")
-    st.markdown("**Tip**: This app auto-detects columns using keywords and includes fulfillment insights.")
+    st.info("👆 Upload a Kickstarter or Big Cartel CSV to start")
+    st.markdown("**Supported formats:** Kickstarter *Reports → All Rewards* · Big Cartel *Orders → Export*")
 
 st.caption("Kickstarter Backer Parser v1.0 • Auto-detection + Fulfillment tools")

@@ -96,6 +96,92 @@ def strip_pii(df: pd.DataFrame) -> pd.DataFrame:
     return df[safe_cols].copy()
 
 
+def detect_format(df: pd.DataFrame) -> str:
+    if 'Buyer first name' in df.columns and 'Number' in df.columns:
+        return 'bigcartel'
+    return 'kickstarter'
+
+
+def _parse_bigcartel_items_str(items_str: str) -> list:
+    """Return list of (name, qty) tuples from packed Big Cartel items string."""
+    if not items_str or str(items_str).lower() == 'nan':
+        return []
+    result = []
+    for item in str(items_str).split(';'):
+        item = item.strip()
+        if not item:
+            continue
+        parts = {}
+        for p in item.split('|'):
+            if ':' in p:
+                k, v = p.split(':', 1)
+                parts[k.strip()] = v.strip()
+        name = parts.get('product_name', '').strip()
+        if not name:
+            continue
+        try:
+            qty = int(float(parts.get('quantity', '1')))
+        except (ValueError, TypeError):
+            qty = 1
+        result.append((name, qty))
+    return result
+
+
+def parse_bigcartel_items(items_str: str) -> str:
+    parsed = _parse_bigcartel_items_str(items_str)
+    lines = [f"{qty}x {name}" if qty > 1 else name for name, qty in parsed]
+    return '\n'.join(f"- {line}" for line in lines)
+
+
+def _bigcartel_first_product(items_str: str) -> str:
+    parsed = _parse_bigcartel_items_str(items_str)
+    return parsed[0][0] if parsed else ''
+
+
+def normalise_bigcartel(df: pd.DataFrame) -> pd.DataFrame:
+    def safe(col):
+        return df[col].fillna('').astype(str).str.strip()
+
+    addr1 = safe('Shipping address 1')
+    addr2 = safe('Shipping address 2')
+    combined_addr1 = addr1.where(addr2 == '', addr1 + ', ' + addr2)
+
+    full_name = (safe('Buyer first name') + ' ' + safe('Buyer last name')).str.strip()
+
+    def concat_full_address(row):
+        parts = [
+            str(row.get('Shipping address 1', '') or '').strip(),
+            str(row.get('Shipping address 2', '') or '').strip(),
+            str(row.get('Shipping city', '') or '').strip(),
+            str(row.get('Shipping state', '') or '').strip(),
+            str(row.get('Shipping zip', '') or '').strip(),
+            str(row.get('Shipping country', '') or '').strip(),
+        ]
+        return ', '.join(p for p in parts if p)
+
+    out = pd.DataFrame()
+    out['Backer Number']      = safe('Number')
+    out['Backer Name']        = full_name
+    out['Email']              = safe('Buyer email')
+    out['Reward Title']       = df['Items'].apply(_bigcartel_first_product)
+    out['Pledge Amount']      = df['Total price']
+    out['Pledged At']         = safe('Date')
+    out['Fulfillment Status'] = safe('Shipping status')
+    out['Shipping Name']      = full_name
+    out['Shipping Address 1'] = combined_addr1
+    out['Shipping City']      = safe('Shipping city')
+    out['Shipping State']     = safe('Shipping state')
+    out['Shipping Postal Code'] = safe('Shipping zip')
+    out['Shipping Country']   = safe('Shipping country')
+    out['Shipping Country Code'] = safe('Shipping country')
+    out['Shipping Full Address'] = df.apply(concat_full_address, axis=1)
+    out['Items']              = df['Items'].apply(parse_bigcartel_items)
+    out['Item Count']         = df['Item count']
+    out['Total Shipping']     = df['Total shipping']
+    out['Discount Code']      = safe('Discount code')
+    return out
+
+
 def classify_columns(columns: list) -> tuple:
     core = [c for c in columns if any(k in c for k in CORE_KEYWORDS)]
     shipping = [c for c in columns if any(k in c for k in SHIPPING_KEYWORDS)]

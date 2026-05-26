@@ -1,6 +1,8 @@
 import pytest
 import pandas as pd
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list, strip_pii
+from parser_logic import (clean_column_name, classify_columns, dedupe_column_names,
+                          build_label, build_items_list, strip_pii,
+                          detect_format, normalise_bigcartel, parse_bigcartel_items)
 
 
 class TestCleanColumnName:
@@ -231,3 +233,129 @@ class TestStripPii:
         df = pd.DataFrame(columns=['Backer Name', 'Email', 'Shipping Address 1'])
         result = strip_pii(df)
         assert len(result.columns) == 0
+
+
+class TestDetectFormat:
+    def test_detects_kickstarter(self):
+        df = pd.DataFrame(columns=['Backer Number', 'Backer Name', 'Reward Title'])
+        assert detect_format(df) == 'kickstarter'
+
+    def test_detects_bigcartel(self):
+        df = pd.DataFrame(columns=['Number', 'Buyer first name', 'Buyer last name'])
+        assert detect_format(df) == 'bigcartel'
+
+    def test_unknown_format_defaults_to_kickstarter(self):
+        df = pd.DataFrame(columns=['Col A', 'Col B'])
+        assert detect_format(df) == 'kickstarter'
+
+
+class TestParseBigCartelItems:
+    SINGLE = "product_name:Breakwater by Katriona Chapman|product_option_name:|quantity:1|price:12.99|total:12.99"
+    MULTI  = (
+        "product_name:Breakwater by Katriona Chapman|product_option_name:|quantity:1|price:12.99|total:12.99;"
+        "product_name:Acid Box|product_option_name:|quantity:2|price:14.99|total:29.98"
+    )
+
+    def test_single_item(self):
+        result = parse_bigcartel_items(self.SINGLE)
+        assert '- Breakwater by Katriona Chapman' in result
+
+    def test_single_quantity_no_count_prefix(self):
+        result = parse_bigcartel_items(self.SINGLE)
+        assert '1x' not in result
+
+    def test_multi_item_separator(self):
+        result = parse_bigcartel_items(self.MULTI)
+        assert 'Breakwater' in result
+        assert 'Acid Box' in result
+
+    def test_multi_quantity_shows_count(self):
+        result = parse_bigcartel_items(self.MULTI)
+        assert '2x Acid Box' in result
+
+    def test_empty_string_returns_empty(self):
+        assert parse_bigcartel_items('') == ''
+
+    def test_nan_returns_empty(self):
+        assert parse_bigcartel_items('nan') == ''
+
+    def test_all_lines_bulleted(self):
+        result = parse_bigcartel_items(self.MULTI)
+        for line in result.strip().split('\n'):
+            assert line.startswith('- ')
+
+
+class TestNormaliseBigCartel:
+    def _make_df(self):
+        return pd.DataFrame([{
+            'Number': 'XCRB-630287',
+            'Buyer first name': 'Ron',
+            'Buyer last name': 'Evans',
+            'Buyer email': 'ron@example.com',
+            'Buyer phone number': '+1 415 000 0000',
+            'Date': '2026-05-26',
+            'Time': '4:56 AM BST',
+            'Status': '',
+            'Payment status': 'completed',
+            'Transaction ID': 'pi_abc',
+            'Shipping status': 'unshipped',
+            'Shipping methods': 'Shipping :7.0',
+            'Shipping address 1': '76 Indian Rock Road',
+            'Shipping address 2': '',
+            'Shipping city': 'San Anselmo',
+            'Shipping state': 'California',
+            'Shipping zip': '94960',
+            'Shipping country': 'US',
+            'Currency': 'GBP',
+            'Items': 'product_name:Breakwater by Katriona Chapman|product_option_name:|quantity:1|price:12.99|total:12.99',
+            'Item count': 1,
+            'Item total': 12.99,
+            'Total price': 19.99,
+            'Total shipping': 7.0,
+            'Total tax': 0.0,
+            'Tax remitted by Big Cartel': 0,
+            'Total discount': 0.0,
+            'Discount code': 'SAVE10',
+            'Source': 'Online',
+            'Note': '',
+            'Private notes': '',
+        }])
+
+    def test_required_output_columns_present(self):
+        result = normalise_bigcartel(self._make_df())
+        for col in ['Backer Number', 'Backer Name', 'Email', 'Reward Title',
+                    'Pledge Amount', 'Shipping Country', 'Items']:
+            assert col in result.columns
+
+    def test_name_concatenated(self):
+        result = normalise_bigcartel(self._make_df())
+        assert result['Backer Name'].iloc[0] == 'Ron Evans'
+
+    def test_shipping_name_matches_backer_name(self):
+        result = normalise_bigcartel(self._make_df())
+        assert result['Shipping Name'].iloc[0] == 'Ron Evans'
+
+    def test_address_parts_in_full_address(self):
+        result = normalise_bigcartel(self._make_df())
+        addr = result['Shipping Full Address'].iloc[0]
+        assert '76 Indian Rock Road' in addr
+        assert 'San Anselmo' in addr
+        assert 'US' in addr
+
+    def test_addr2_combined_into_addr1(self):
+        df = self._make_df()
+        df.at[0, 'Shipping address 2'] = 'Apt 4'
+        result = normalise_bigcartel(df)
+        assert 'Apt 4' in result['Shipping Address 1'].iloc[0]
+
+    def test_reward_title_is_first_product(self):
+        result = normalise_bigcartel(self._make_df())
+        assert result['Reward Title'].iloc[0] == 'Breakwater by Katriona Chapman'
+
+    def test_items_parsed_and_bulleted(self):
+        result = normalise_bigcartel(self._make_df())
+        assert result['Items'].iloc[0].startswith('- ')
+
+    def test_discount_code_preserved(self):
+        result = normalise_bigcartel(self._make_df())
+        assert result['Discount Code'].iloc[0] == 'SAVE10'
