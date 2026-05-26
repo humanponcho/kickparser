@@ -1,5 +1,6 @@
 import pytest
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list
+import pandas as pd
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list, strip_pii
 
 
 class TestCleanColumnName:
@@ -198,3 +199,35 @@ class TestBuildItemsList:
         result = build_items_list(self._row(), self._addon_cols())
         for line in result.split('\n'):
             assert line.startswith('- ')
+
+
+class TestStripPii:
+    def _make_df(self):
+        return pd.DataFrame(columns=[
+            'Backer Number', 'Backer Name', 'Email', 'Backer UID',
+            'Reward Title', 'Pledge Amount', 'Pledged At', 'Fulfillment Status',
+            'Shipping Country', 'Shipping Address 1', 'Shipping City',
+            'Shipping State', 'Shipping Zip', 'Billing State', 'Notes',
+        ])
+
+    def test_pii_columns_removed(self):
+        result = strip_pii(self._make_df())
+        for col in ['Backer Name', 'Email', 'Backer UID', 'Shipping Address 1',
+                    'Shipping City', 'Shipping State', 'Shipping Zip', 'Billing State', 'Notes']:
+            assert col not in result.columns
+
+    def test_safe_columns_kept(self):
+        result = strip_pii(self._make_df())
+        for col in ['Backer Number', 'Reward Title', 'Pledge Amount',
+                    'Pledged At', 'Fulfillment Status', 'Shipping Country']:
+            assert col in result.columns
+
+    def test_all_safe_df_passes_through(self):
+        df = pd.DataFrame(columns=['Reward Title', 'Pledge Amount', 'Shipping Country'])
+        result = strip_pii(df)
+        assert list(result.columns) == ['Reward Title', 'Pledge Amount', 'Shipping Country']
+
+    def test_all_pii_df_returns_empty_columns(self):
+        df = pd.DataFrame(columns=['Backer Name', 'Email', 'Shipping Address 1'])
+        result = strip_pii(df)
+        assert len(result.columns) == 0

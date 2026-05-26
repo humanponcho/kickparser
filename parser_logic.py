@@ -1,4 +1,5 @@
 import re
+import pandas as pd
 
 CORE_KEYWORDS = [
     'Backer Number', 'Backer UID', 'Backer Name', 'Email', 'Reward Title',
@@ -6,6 +7,8 @@ CORE_KEYWORDS = [
     'Pledged Status', 'Notes', 'Billing',
 ]
 SHIPPING_KEYWORDS = ['Shipping']
+
+PII_KEYWORDS = ['Name', 'Email', 'UID', 'Billing', 'Address', 'City', 'State', 'Zip', 'Postcode', 'Phone', 'Notes']
 
 LABEL_COLUMNS = [
     'Shipping Name',
@@ -86,6 +89,11 @@ def build_items_list(row, addon_cols: list) -> str:
             items.append(display)  # non-numeric reply — show name only
 
     return '\n'.join(f"- {item}" for item in items)
+
+
+def strip_pii(df: pd.DataFrame) -> pd.DataFrame:
+    safe_cols = [c for c in df.columns if not any(k.lower() in c.lower() for k in PII_KEYWORDS)]
+    return df[safe_cols].copy()
 
 
 def classify_columns(columns: list) -> tuple:

@@ -3,7 +3,7 @@ import pandas as pd
 import zipfile
 import io
 from datetime import datetime
-from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list, LABEL_COLUMNS
+from parser_logic import clean_column_name, classify_columns, dedupe_column_names, build_label, build_items_list, strip_pii, LABEL_COLUMNS
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
 
@@ -117,6 +117,8 @@ if uploaded_file is not None:
     labels_df['Label'] = filtered_df[label_source_cols].apply(build_label, axis=1)
     labels_df['Items'] = filtered_df.apply(lambda row: build_items_list(row, addon_cols), axis=1)
 
+    anon_df = strip_pii(filtered_df)
+
     # ====================== FULFILLMENT DASHBOARD ======================
     st.header("📦 Fulfillment Dashboard")
     dash1, dash2, dash3, dash4 = st.columns(4)
@@ -140,7 +142,7 @@ if uploaded_file is not None:
     st.bar_chart(filtered_df['Shipping Country'].value_counts().head(10))
 
     # ====================== TABS ======================
-    tab1, tab2, tab3, tab4 = st.tabs(["Addons", "Shipping", "Labels", "Raw Data"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Addons", "Shipping", "Labels", "Raw Data", "Anonymised"])
     with tab1:
         st.dataframe(addons_df, use_container_width=True)
     with tab2:
@@ -149,6 +151,9 @@ if uploaded_file is not None:
         st.dataframe(labels_df, use_container_width=True)
     with tab4:
         st.dataframe(filtered_df, use_container_width=True)
+    with tab5:
+        st.caption("Names, emails, and addresses removed — safe for statistical analysis.")
+        st.dataframe(anon_df, use_container_width=True)
 
     # ====================== DOWNLOADS ======================
     st.header("📥 Download Split Files")
@@ -160,6 +165,7 @@ if uploaded_file is not None:
         z.writestr(f"addons_{timestamp}.csv", addons_df.to_csv(index=False))
         z.writestr(f"shipping_{timestamp}.csv", shipping_df.to_csv(index=False))
         z.writestr(f"labels_{timestamp}.csv", labels_df.to_csv(index=False))
+        z.writestr(f"anon_stats_{timestamp}.csv", anon_df.to_csv(index=False))
 
     zip_buffer.seek(0)
 
@@ -170,7 +176,7 @@ if uploaded_file is not None:
         mime="application/zip"
     )
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.download_button("Core Backers CSV", core_df.to_csv(index=False),
                            f"core_backers_{timestamp}.csv", "text/csv")
@@ -183,6 +189,9 @@ if uploaded_file is not None:
     with col4:
         st.download_button("Labels CSV", labels_df.to_csv(index=False),
                            f"labels_{timestamp}.csv", "text/csv")
+    with col5:
+        st.download_button("Anonymised Stats CSV", anon_df.to_csv(index=False),
+                           f"anon_stats_{timestamp}.csv", "text/csv")
 
 else:
     st.info("👆 Upload your Kickstarter 'All Rewards' CSV to start")
