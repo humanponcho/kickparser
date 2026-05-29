@@ -122,10 +122,7 @@ if uploaded_file is not None:
     label_source_cols = [c for c in LABEL_COLUMNS if c in filtered_df.columns]
     labels_df = filtered_df[['Backer Number']].copy()
     labels_df['Label'] = filtered_df[label_source_cols].apply(build_label, axis=1)
-    if 'Items' in filtered_df.columns:
-        labels_df['Items'] = filtered_df['Items']
-    else:
-        labels_df['Items'] = filtered_df.apply(lambda row: build_items_list(row, addon_cols), axis=1)
+    labels_df['Items'] = filtered_df.apply(lambda row: build_items_list(row, addon_cols), axis=1)
 
     anon_df = strip_pii(filtered_df)
 
