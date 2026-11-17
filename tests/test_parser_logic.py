@@ -2,7 +2,8 @@ import pytest
 import pandas as pd
 from parser_logic import (clean_column_name, classify_columns, dedupe_column_names,
                           build_label, build_items_list, strip_pii,
-                          detect_format, normalise_bigcartel, parse_bigcartel_items)
+                          detect_format, normalise_bigcartel, parse_bigcartel_items,
+                          bigcartel_products, rows_matching_products)
 
 
 class TestCleanColumnName:
@@ -400,3 +401,37 @@ class TestNormaliseBigCartel:
             '- Victory Point by Owen D. Pomery (Paperback Edition)\n'
             '- The Hard Switch by Owen D. Pomery (Softcover)'
         )
+
+
+class TestBigCartelProductFilter:
+    MULTI = (
+        'product_name:Victory Point |product_option_name:|quantity:1|price:12.99|total:12.99;'
+        'product_name:The Hard Switch|product_option_name:|quantity:2|price:14.99|total:29.98'
+    )
+
+    def _df(self):
+        return pd.DataFrame({'Items': [self.MULTI,
+                                       'product_name:Oracles|quantity:1',
+                                       '']})
+
+    def test_products_lists_every_product(self):
+        products = bigcartel_products(self._df())
+        assert products.tolist() == [['Victory Point', 'The Hard Switch'], ['Oracles'], []]
+
+    def test_products_with_loose_header(self):
+        df = self._df().rename(columns={'Items': ' items '})
+        assert bigcartel_products(df).iloc[1] == ['Oracles']
+
+    def test_second_product_matches_filter(self):
+        products = bigcartel_products(self._df())
+        assert rows_matching_products(products, ['The Hard Switch']).tolist() == [True, False, False]
+
+    def test_any_selected_product_matches(self):
+        products = bigcartel_products(self._df())
+        result = rows_matching_products(products, ['Oracles', 'Victory Point'])
+        assert result.tolist() == [True, True, False]
+
+    def test_keeps_index(self):
+        df = self._df()
+        df.index = [10, 20, 30]
+        assert list(rows_matching_products(bigcartel_products(df), ['Oracles']).index) == [10, 20, 30]

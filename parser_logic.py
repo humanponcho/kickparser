@@ -152,15 +152,31 @@ _BIGCARTEL_ALIASES = {
 }
 
 
-def normalise_bigcartel(df: pd.DataFrame) -> pd.DataFrame:
+def _bigcartel_raw(df: pd.DataFrame, col: str) -> pd.Series:
+    """Return a Big Cartel column, matching names loosely; empty if absent."""
     lookup = {_norm_col(c): c for c in df.columns}
+    for name in _BIGCARTEL_ALIASES.get(col, [col]):
+        real = lookup.get(_norm_col(name))
+        if real is not None:
+            return df[real]
+    return pd.Series([''] * len(df), index=df.index, dtype=object)
 
+
+def bigcartel_products(df: pd.DataFrame) -> pd.Series:
+    """Return, for each raw Big Cartel order, the list of product names."""
+    items = _bigcartel_raw(df, 'Items').fillna('').astype(str)
+    return items.apply(lambda s: [name for name, _ in _parse_bigcartel_items_str(s)])
+
+
+def rows_matching_products(products: pd.Series, selected: list) -> pd.Series:
+    """True for each row whose product list contains any selected product."""
+    wanted = set(selected)
+    return products.apply(lambda names: any(n in wanted for n in names))
+
+
+def normalise_bigcartel(df: pd.DataFrame) -> pd.DataFrame:
     def raw(col):
-        for name in _BIGCARTEL_ALIASES.get(col, [col]):
-            real = lookup.get(_norm_col(name))
-            if real is not None:
-                return df[real]
-        return pd.Series([''] * len(df), index=df.index, dtype=object)
+        return _bigcartel_raw(df, col)
 
     def safe(col):
         return raw(col).fillna('').astype(str).str.strip()

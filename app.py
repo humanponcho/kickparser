@@ -5,7 +5,8 @@ import io
 from datetime import datetime
 from parser_logic import (clean_column_name, classify_columns, dedupe_column_names,
                           build_label, build_items_list, strip_pii,
-                          detect_format, normalise_bigcartel, LABEL_COLUMNS)
+                          detect_format, normalise_bigcartel, bigcartel_products,
+                          rows_matching_products, LABEL_COLUMNS)
 
 st.set_page_config(page_title="KS Backer Parser", layout="wide")
 
@@ -59,6 +60,8 @@ if uploaded_file is not None:
 
     source_format = detect_format(df)
     if source_format == 'bigcartel':
+        # Keep every product per order; 'Reward Title' holds only the first one.
+        order_products = bigcartel_products(df)
         df = normalise_bigcartel(df)
         st.info("📦 Big Cartel format detected — normalised automatically.")
 
@@ -95,7 +98,11 @@ if uploaded_file is not None:
         default=countries[:5] if len(countries) > 5 else countries
     )
 
-    rewards = sorted(df['Reward Title'].dropna().unique())
+    if source_format != 'bigcartel':
+        order_products = df['Reward Title'].apply(
+            lambda r: [r] if pd.notna(r) and str(r).strip() else []
+        )
+    rewards = sorted({p for names in order_products for p in names})
     selected_rewards = st.sidebar.multiselect(
         "Filter by Reward", options=rewards, default=rewards
     )
@@ -103,8 +110,9 @@ if uploaded_file is not None:
     filtered_df = df.copy()
     if selected_countries:
         filtered_df = filtered_df[filtered_df['Shipping Country'].isin(selected_countries)]
-    if selected_rewards:
-        filtered_df = filtered_df[filtered_df['Reward Title'].isin(selected_rewards)]
+    if selected_rewards and set(selected_rewards) != set(rewards):
+        keep = rows_matching_products(order_products.loc[filtered_df.index], selected_rewards)
+        filtered_df = filtered_df[keep]
 
     if filtered_df.empty:
         st.warning("No backers match the current filters. Adjust the filters in the sidebar.")
