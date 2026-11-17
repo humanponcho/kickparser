@@ -386,3 +386,17 @@ class TestNormaliseBigCartel:
         df.at[0, 'Shipping state'] = None
         result = normalise_bigcartel(df)
         assert 'nan' not in result['Shipping Full Address'].iloc[0]
+
+    def test_multi_item_order_lists_every_product(self):
+        df = self._make_df()
+        df.at[0, 'Items'] = (
+            'product_name:Victory Point by Owen D. Pomery (Paperback Edition) '
+            '|product_option_name:|quantity:1|price:12.99|total:12.99;'
+            'product_name:The Hard Switch by Owen D. Pomery (Softcover)'
+            '|product_option_name:|quantity:1|price:14.99|total:14.99'
+        )
+        items = normalise_bigcartel(df)['Items'].iloc[0]
+        assert items == (
+            '- Victory Point by Owen D. Pomery (Paperback Edition)\n'
+            '- The Hard Switch by Owen D. Pomery (Softcover)'
+        )
