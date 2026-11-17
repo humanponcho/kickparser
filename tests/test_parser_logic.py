@@ -359,3 +359,30 @@ class TestNormaliseBigCartel:
     def test_discount_code_preserved(self):
         result = normalise_bigcartel(self._make_df())
         assert result['Discount Code'].iloc[0] == 'SAVE10'
+
+    def test_missing_date_column_does_not_crash(self):
+        df = self._make_df().drop(columns=['Date'])
+        result = normalise_bigcartel(df)
+        assert result['Pledged At'].iloc[0] == ''
+
+    def test_date_alias_used(self):
+        df = self._make_df().rename(columns={'Date': 'Created at'})
+        result = normalise_bigcartel(df)
+        assert result['Pledged At'].iloc[0] == '2026-05-26'
+
+    def test_header_whitespace_and_case_ignored(self):
+        df = self._make_df().rename(columns={'Date': ' date ', 'Items': 'ITEMS'})
+        result = normalise_bigcartel(df)
+        assert result['Pledged At'].iloc[0] == '2026-05-26'
+        assert result['Reward Title'].iloc[0] == 'Breakwater by Katriona Chapman'
+
+    def test_missing_numeric_columns_do_not_crash(self):
+        df = self._make_df().drop(columns=['Total price', 'Item count', 'Total shipping'])
+        result = normalise_bigcartel(df)
+        assert len(result) == 1
+
+    def test_empty_address_parts_not_shown_as_nan(self):
+        df = self._make_df()
+        df.at[0, 'Shipping state'] = None
+        result = normalise_bigcartel(df)
+        assert 'nan' not in result['Shipping Full Address'].iloc[0]

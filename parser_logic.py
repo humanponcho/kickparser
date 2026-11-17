@@ -138,9 +138,32 @@ def _bigcartel_first_product(items_str: str) -> str:
     return parsed[0][0] if parsed else ''
 
 
+def _norm_col(name) -> str:
+    return str(name).replace('﻿', '').strip().lower()
+
+
+# Big Cartel has changed some export headers over time. The first name in
+# each list is the one in the current export; the others are known variants.
+_BIGCARTEL_ALIASES = {
+    'Date': ['Date', 'Order date', 'Created at', 'Created', 'Completed at', 'Paid at'],
+    'Total price': ['Total price', 'Total'],
+    'Total shipping': ['Total shipping', 'Shipping total'],
+    'Item count': ['Item count', 'Quantity'],
+}
+
+
 def normalise_bigcartel(df: pd.DataFrame) -> pd.DataFrame:
+    lookup = {_norm_col(c): c for c in df.columns}
+
+    def raw(col):
+        for name in _BIGCARTEL_ALIASES.get(col, [col]):
+            real = lookup.get(_norm_col(name))
+            if real is not None:
+                return df[real]
+        return pd.Series([''] * len(df), index=df.index, dtype=object)
+
     def safe(col):
-        return df[col].fillna('').astype(str).str.strip()
+        return raw(col).fillna('').astype(str).str.strip()
 
     addr1 = safe('Shipping address 1')
     addr2 = safe('Shipping address 2')
@@ -148,23 +171,20 @@ def normalise_bigcartel(df: pd.DataFrame) -> pd.DataFrame:
 
     full_name = (safe('Buyer first name') + ' ' + safe('Buyer last name')).str.strip()
 
-    def concat_full_address(row):
-        parts = [
-            str(row.get('Shipping address 1', '') or '').strip(),
-            str(row.get('Shipping address 2', '') or '').strip(),
-            str(row.get('Shipping city', '') or '').strip(),
-            str(row.get('Shipping state', '') or '').strip(),
-            str(row.get('Shipping zip', '') or '').strip(),
-            str(row.get('Shipping country', '') or '').strip(),
-        ]
-        return ', '.join(p for p in parts if p)
+    address_parts = [safe(c) for c in (
+        'Shipping address 1', 'Shipping address 2', 'Shipping city',
+        'Shipping state', 'Shipping zip', 'Shipping country',
+    )]
+    full_address = pd.concat(address_parts, axis=1).apply(
+        lambda r: ', '.join(p for p in r if p), axis=1
+    )
 
     out = pd.DataFrame()
     out['Backer Number']      = safe('Number')
     out['Backer Name']        = full_name
     out['Email']              = safe('Buyer email')
-    out['Reward Title']       = df['Items'].apply(_bigcartel_first_product)
-    out['Pledge Amount']      = df['Total price']
+    out['Reward Title']       = safe('Items').apply(_bigcartel_first_product)
+    out['Pledge Amount']      = raw('Total price')
     out['Pledged At']         = safe('Date')
     out['Fulfillment Status'] = safe('Shipping status')
     out['Shipping Name']      = full_name
@@ -174,10 +194,10 @@ def normalise_bigcartel(df: pd.DataFrame) -> pd.DataFrame:
     out['Shipping Postal Code'] = safe('Shipping zip')
     out['Shipping Country']   = safe('Shipping country')
     out['Shipping Country Code'] = safe('Shipping country')
-    out['Shipping Full Address'] = df.apply(concat_full_address, axis=1)
-    out['Items']              = df['Items'].apply(parse_bigcartel_items)
-    out['Item Count']         = df['Item count']
-    out['Total Shipping']     = df['Total shipping']
+    out['Shipping Full Address'] = full_address
+    out['Items']              = safe('Items').apply(parse_bigcartel_items)
+    out['Item Count']         = raw('Item count')
+    out['Total Shipping']     = raw('Total shipping')
     out['Discount Code']      = safe('Discount code')
     return out
 
