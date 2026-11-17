@@ -293,7 +293,7 @@ class TestNormaliseBigCartel:
             'Buyer last name': 'Evans',
             'Buyer email': 'ron@example.com',
             'Buyer phone number': '+1 415 000 0000',
-            'Date': '2026-05-26',
+            'Order date': '2026-05-26',
             'Time': '4:56 AM BST',
             'Status': '',
             'Payment status': 'completed',
@@ -361,17 +361,17 @@ class TestNormaliseBigCartel:
         assert result['Discount Code'].iloc[0] == 'SAVE10'
 
     def test_missing_date_column_does_not_crash(self):
-        df = self._make_df().drop(columns=['Date'])
+        df = self._make_df().drop(columns=['Order date'])
         result = normalise_bigcartel(df)
         assert result['Pledged At'].iloc[0] == ''
 
     def test_date_alias_used(self):
-        df = self._make_df().rename(columns={'Date': 'Created at'})
+        df = self._make_df().rename(columns={'Order date': 'Date'})
         result = normalise_bigcartel(df)
         assert result['Pledged At'].iloc[0] == '2026-05-26'
 
     def test_header_whitespace_and_case_ignored(self):
-        df = self._make_df().rename(columns={'Date': ' date ', 'Items': 'ITEMS'})
+        df = self._make_df().rename(columns={'Order date': ' ORDER DATE ', 'Items': 'ITEMS'})
         result = normalise_bigcartel(df)
         assert result['Pledged At'].iloc[0] == '2026-05-26'
         assert result['Reward Title'].iloc[0] == 'Breakwater by Katriona Chapman'

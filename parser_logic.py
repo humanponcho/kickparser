@@ -145,7 +145,7 @@ def _norm_col(name) -> str:
 # Big Cartel has changed some export headers over time. The first name in
 # each list is the one in the current export; the others are known variants.
 _BIGCARTEL_ALIASES = {
-    'Date': ['Date', 'Order date', 'Created at', 'Created', 'Completed at', 'Paid at'],
+    'Date': ['Order date', 'Date', 'Created at', 'Created', 'Completed at', 'Paid at'],
     'Total price': ['Total price', 'Total'],
     'Total shipping': ['Total shipping', 'Shipping total'],
     'Item count': ['Item count', 'Quantity'],
